@@ -101,7 +101,7 @@ instance (forall (s :: S) . Eq (Term s a)) => Eq (TestableTerm a) where
 instance PShow a => Show (TestableTerm a) where
     show (TestableTerm term) =
         let (_, _, trace) = evalScript $ compile $ ptraceError (pshow term)
-         in show $ T.intercalate " " trace
+         in T.unpack . T.intercalate " " $ trace
 
 {- | PArbitrary is Plutarch equivalent of `Arbitrary` typeclass from
    QuickCheck. It generates randomized closed term, which can be used
