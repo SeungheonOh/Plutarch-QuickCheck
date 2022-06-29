@@ -1,0 +1,93 @@
+cabal-version:      2.4
+name:               study
+version:            0.1.0.0
+
+-- A short (one-line) description of the package.
+-- synopsis:
+
+-- A longer description of the package.
+-- description:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+
+-- The license under which the package is released.
+-- license:
+author:             Seungheon Oh
+maintainer:         seungheon.ooh@gmail.com
+
+-- A copyright notice.
+-- copyright:
+-- category:
+extra-source-files: CHANGELOG.md
+
+common common-lang
+  ghc-options:
+  build-depends:
+    , base               ^>=4.16
+    , plutarch
+    , plutus-ledger-api
+    , plutus-tx
+
+  default-extensions:
+    BangPatterns
+    BinaryLiterals
+    ConstraintKinds
+    DataKinds
+    DeriveTraversable
+    DerivingVia
+    EmptyCase
+    FlexibleContexts
+    FlexibleInstances
+    GeneralisedNewtypeDeriving
+    HexFloatLiterals
+    InstanceSigs
+    KindSignatures
+    LambdaCase
+    MultiParamTypeClasses
+    NumericUnderscores
+    OverloadedStrings
+    PackageImports
+    ScopedTypeVariables
+    StandaloneDeriving
+    TupleSections
+    TypeOperators
+
+  default-language:   Haskell2010
+
+-- Libraries
+
+library
+  import:          common-lang
+  exposed-modules: Lib
+  build-depends:
+    , bytestring
+    , containers
+    , generics-sop
+    , mtl
+    , plutarch-extra
+    , plutarch-numeric
+    , plutarch-quickcheck
+    , plutus-core
+    , QuickCheck
+    , quickcheck-instances
+    , tagged
+    , tasty
+    , tasty-quickcheck
+    , text
+    , universe
+
+  hs-source-dirs:  src
+
+executable study
+  import:           common-lang
+  main-is:          Main.hs
+
+  -- Modules included in this executable, other than Main.
+  -- other-modules:
+
+  -- LANGUAGE extensions used by modules in this package.
+  -- other-extensions:
+  build-depends:    base ^>=4.16.2.0
+  hs-source-dirs:   app
+  default-language: Haskell2010
