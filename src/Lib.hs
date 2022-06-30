@@ -1,58 +1,27 @@
-{-# LANGUAGE RankNTypes, DefaultSignatures, TypeFamilies, UndecidableInstances, TypeApplications, DeriveAnyClass, AllowAmbiguousTypes, TypeFamilyDependencies, QuantifiedConstraints #-}
+{-# LANGUAGE RankNTypes, DefaultSignatures, TypeFamilies, UndecidableInstances, TypeApplications, DeriveAnyClass, AllowAmbiguousTypes, TypeFamilyDependencies, QuantifiedConstraints, ImpredicativeTypes #-}
 
 module Lib where
 
+import qualified GHC.Exts as Exts
 import Test.Tasty
 import Test.Tasty.QuickCheck hiding (NonZero)
 import Test.QuickCheck
+import Data.ByteString
 
 import qualified Data.Text as T
 import Plutarch
+import Plutarch.DataRepr
+import Plutarch.List
+import Plutarch.Rational
 import Plutarch.Unsafe
 import Plutarch.Evaluate
 import Plutarch.Prelude
 import Plutarch.Show
 import Plutarch.Lift
 import Plutarch.Api.V1
+import Plutarch.Api.V1.Time
 
 import Test.Tasty.Plutarch.Property
-
-test :: TestableTerm PInteger -> TestableTerm PInteger -> TestableTerm PInteger -> TestableTerm PBool
-test (TestableTerm x) (TestableTerm y) (TestableTerm z) = TestableTerm $ x + y #< z + 10
-
-test3 = fromPFun $ plam $ \(x :: Term s PInteger) -> pconstant False
-
-pfunction :: Term s (PMaybe PString :--> PBool)
-pfunction = plam $ \x -> pmatch x $ \case
-    PJust _ -> pcon PFalse
-    PNothing -> pcon PTrue
-
-pfunction2 :: Term s (PInteger :--> PInteger :--> PBool)
-pfunction2 = plam $ \x y -> x #== y
-
-commutativity :: Term s (PInteger :--> PInteger :--> PBool)
-commutativity = plam $ \x y -> x + y #== y + x
-
-commutativitySub :: Term s ((PBuiltinPair PInteger PInteger) :--> PBool)
-commutativitySub = plam $ \x-> plet (pfstBuiltin # x) $ \a -> plet (psndBuiltin # x) $ \b ->
-    a + b #== b + a
-
-commutativityProp :: Property
-commutativityProp = peqProperty (pconstant True) (arbitrary :: Gen (Integer, Integer)) (const []) commutativitySub
-
-main = defaultMain $
-    testGroup "performance" $
-    [ testGroup "Commutativity of addition" $
-      [ testGroup "new" [testProperty "" (withMaxSuccess 50000 (fromPFun commutativity))]
-      , testGroup "new - worse method" [testProperty "" (withMaxSuccess 50000 (fromPFun commutativitySub))]      
-      , testGroup "old" [testProperty "" (withMaxSuccess 50000 (commutativityProp))]
-      ]
-    ]
-
-pIllegal :: Term s (PInteger :--> PInteger :--> PInteger :--> PString)
-pIllegal = plam $ \x y z -> "asdF"
-
-test4 = fromPFun pfunction
 
 type family TestableFun (p :: S -> Type) = r | r -> p where
     TestableFun PBool = TestableTerm PBool
@@ -69,7 +38,13 @@ instance forall a b c d. (b ~ (c :--> d), FromPFunN c d) => FromPFunN a b where
 
 instance Testable (TestableTerm PBool) where
     property (TestableTerm t) = property (plift t)
-    
+
+{- | TestableTerm is a wrapper for closed Plutarch term. This
+   abstraction allows Plutarch values can be generated via QuickCheck
+   Generator.
+
+ @since x.y.z
+-}
 newtype TestableTerm a = TestableTerm (forall s. Term s a)
 
 liftTestable ::
@@ -102,7 +77,7 @@ instance PShow a => Show (TestableTerm a) where
     show (TestableTerm term) =
         let (_, _, trace) = evalScript $ compile $ ptraceError (pshow term)
          in T.unpack . T.intercalate " " $ trace
-
+    
 {- | PArbitrary is Plutarch equivalent of `Arbitrary` typeclass from
    QuickCheck. It generates randomized closed term, which can be used
    to test property over Plutarch code without compiling and evaluating.
@@ -138,6 +113,32 @@ deriving instance PArbitrary PInteger
 deriving instance PArbitrary PBool
 
 -- | @since x.y.z
+deriving instance PArbitrary PUnit
+
+-- | @since x.y.z
+instance PArbitrary PByteString where
+    parbitrary = do
+        len <- chooseInt (0, 64)
+        bs <- genByteString len
+        return $ TestableTerm $ pconstant bs
+
+genByteStringUpto :: Int -> Gen ByteString
+genByteStringUpto m = sized go
+  where
+    go :: Int -> Gen ByteString
+    go s = chooseInt (0, min m s) >>= genByteString
+
+genByteString :: Int -> Gen ByteString
+genByteString l = Exts.fromList <$> vectorOf l arbitrary    
+
+-- | @since x.y.z
+instance PArbitrary PRational where
+    parbitrary = do
+        (TestableTerm x) <- parbitrary
+        (TestableTerm y) <- parbitrary
+        return $ TestableTerm $ pcon $ PRational x y
+
+-- | @since x.y.z
 instance PArbitrary PString where
     parbitrary = (\x -> TestableTerm (pconstant (T.pack x))) <$> arbitrary
 
@@ -146,6 +147,13 @@ instance PArbitrary a => PArbitrary (PMaybe a) where
     parbitrary = do
         (TestableTerm x) <- parbitrary
         elements [TestableTerm $ pcon $ PJust x, TestableTerm $ pcon $ PNothing]
+        
+-- | @since x.y.z
+instance {-# OVERLAPPING #-} (PArbitrary a, PArbitrary b) => PArbitrary (PEither a b) where
+    parbitrary = do
+        (TestableTerm x) <- parbitrary
+        (TestableTerm y) <- parbitrary
+        elements [TestableTerm $ pcon $ PRight x, TestableTerm $ pcon $ PLeft y]        
         
 {- | Unfortunately, it is impossible to create @PBuiltinPair@ at the
      Plutarch level without getting into manipulating raw Plutus
@@ -161,7 +169,74 @@ instance
     ( PLift a
     , PLift b
     , Arbitrary (PLifted a, PLifted b)
-    ) =>
-    PArbitrary (PBuiltinPair a b)
-    where
-        parbitrary = (\x -> TestableTerm (pconstant x)) <$> arbitrary
+    ) => PArbitrary (PBuiltinPair a b) where
+    parbitrary = (\x -> TestableTerm (pconstant x)) <$> arbitrary
+
+-- | @since x.y.z
+-- I have no clue why this needs overlapping. GHC insists it is
+-- overlapped with PListLike instance.
+instance {-# OVERLAPPING #-} 
+    ( PArbitrary a
+    , PArbitrary b
+    ) => PArbitrary (PPair a b) where
+    parbitrary = do
+        (TestableTerm x) <- parbitrary
+        (TestableTerm y) <- parbitrary
+        return $ TestableTerm $ pcon $ PPair x y
+
+-- | @since x.y.z
+instance
+    ( PArbitrary a
+    , PListLike b
+    , PElemConstraint b a
+    ) => PArbitrary (b a) where
+    parbitrary = do
+        len <- arbitrary
+        xs <- vectorOf len parbitrary
+        return $ constrPList xs
+        where
+          constrPList :: [TestableTerm a] -> TestableTerm (b a)
+          constrPList [] = TestableTerm $ pnil
+          constrPList ((TestableTerm x): xs) =
+              let (TestableTerm rest) = constrPList xs
+              in TestableTerm $ pcons # x # rest
+
+-- | @since x.y.z
+instance PArbitrary PPOSIXTime where
+    parbitrary = do
+        (TestableTerm x) <- parbitrary
+        return $ TestableTerm $ pcon $ PPOSIXTime x
+
+-- | @since x.y.z
+instance {-# OVERLAPPING #-} (PIsData a, PArbitrary a) => PArbitrary (PExtended a) where
+    parbitrary = do
+        (TestableTerm x) <- parbitrary
+        elements $
+            [ TestableTerm $ pcon $ PNegInf pdnil
+            , TestableTerm $ pcon $ PFinite $ pdcons @"_0" # (pdata x) # pdnil
+            , TestableTerm $ pcon $ PPosInf pdnil
+            ]
+
+-- | @since x.y.z
+instance {-# OVERLAPPING #-} (PIsData a, PArbitrary a) => PArbitrary (PLowerBound a) where
+    parbitrary = do
+        (TestableTerm ex) <- parbitrary
+        (TestableTerm cl) <- parbitrary
+        return $ TestableTerm $ pcon $ PLowerBound $
+            pdcons @"_0" # (pdata ex) #$ pdcons @"_1" # (pdata cl) # pdnil
+
+-- | @since x.y.z
+instance {-# OVERLAPPING #-} (PIsData a, PArbitrary a) => PArbitrary (PUpperBound a) where
+    parbitrary = do
+        (TestableTerm ex) <- parbitrary
+        (TestableTerm cl) <- parbitrary
+        return $ TestableTerm $ pcon $ PUpperBound $
+            pdcons @"_0" # (pdata ex) #$ pdcons @"_1" # (pdata cl) # pdnil
+
+-- | @since x.y.z
+instance {-# OVERLAPPING #-} (PIsData a, PArbitrary a) => PArbitrary (PInterval a) where
+    parbitrary = do
+        (TestableTerm lo) <- parbitrary
+        (TestableTerm up) <- parbitrary
+        return $ TestableTerm $ pcon $ PInterval $
+            pdcons @"from" # (pdata lo) #$ pdcons @"to" # (pdata up) # pdnil
