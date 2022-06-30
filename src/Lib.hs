@@ -20,6 +20,7 @@ import Plutarch.Show
 import Plutarch.Lift
 import Plutarch.Api.V1
 import Plutarch.Api.V1.Time
+import Plutarch.Api.V1.Tuple
 
 import Test.Tasty.Plutarch.Property
 
@@ -149,7 +150,16 @@ instance PArbitrary a => PArbitrary (PMaybe a) where
         elements [TestableTerm $ pcon $ PJust x, TestableTerm $ pcon $ PNothing]
         
 -- | @since x.y.z
-instance {-# OVERLAPPING #-} (PArbitrary a, PArbitrary b) => PArbitrary (PEither a b) where
+instance (PIsData a, PArbitrary a) => PArbitrary (PMaybeData a) where
+    parbitrary = do
+        (TestableTerm x) <- parbitrary
+        elements $
+            [ TestableTerm $ pcon $ PDJust $ pdcons @"_0" # (pdata x) # pdnil
+            , TestableTerm $ pcon $ PDNothing pdnil
+            ]        
+        
+-- | @since x.y.z
+instance (PArbitrary a, PArbitrary b) => PArbitrary (PEither a b) where
     parbitrary = do
         (TestableTerm x) <- parbitrary
         (TestableTerm y) <- parbitrary
@@ -173,9 +183,7 @@ instance
     parbitrary = (\x -> TestableTerm (pconstant x)) <$> arbitrary
 
 -- | @since x.y.z
--- I have no clue why this needs overlapping. GHC insists it is
--- overlapped with PListLike instance.
-instance {-# OVERLAPPING #-} 
+instance
     ( PArbitrary a
     , PArbitrary b
     ) => PArbitrary (PPair a b) where
@@ -187,19 +195,45 @@ instance {-# OVERLAPPING #-}
 -- | @since x.y.z
 instance
     ( PArbitrary a
-    , PListLike b
-    , PElemConstraint b a
-    ) => PArbitrary (b a) where
+    , PArbitrary b
+    , PIsData a
+    , PIsData b
+    ) => PArbitrary (PTuple a b) where
     parbitrary = do
-        len <- arbitrary
-        xs <- vectorOf len parbitrary
-        return $ constrPList xs
-        where
-          constrPList :: [TestableTerm a] -> TestableTerm (b a)
-          constrPList [] = TestableTerm $ pnil
-          constrPList ((TestableTerm x): xs) =
-              let (TestableTerm rest) = constrPList xs
-              in TestableTerm $ pcons # x # rest
+        (TestableTerm x) <- parbitrary
+        (TestableTerm y) <- parbitrary
+        return $ TestableTerm $ ptuple # (pdata x) # (pdata y)
+
+-- | @since x.y.z
+instance
+    ( PArbitrary a
+    , PArbitrary b
+    , PIsData a
+    , PIsData b
+    ) => PArbitrary (PBuiltinPair (PAsData a) (PAsData b)) where
+    parbitrary = do
+        (TestableTerm x) <- parbitrary
+        return $ TestableTerm $ pfromData $ pbuiltinPairFromTuple (pdata x)
+
+genPListLike :: forall b a. (PArbitrary a, PIsListLike b a) => Gen (TestableTerm (b a))
+genPListLike = do
+    len <- arbitrary
+    xs <- vectorOf len parbitrary
+    return $ constrPList xs
+      where
+        constrPList :: [TestableTerm a] -> TestableTerm (b a)
+        constrPList [] = TestableTerm $ pnil
+        constrPList ((TestableTerm x): xs) =
+            let (TestableTerm rest) = constrPList xs
+            in TestableTerm $ pcons # x # rest              
+
+-- | @since x.y.z
+instance forall a. (PArbitrary a, PIsListLike PBuiltinList a) => PArbitrary (PBuiltinList a) where
+    parbitrary = genPListLike
+
+-- | @since x.y.z
+instance forall a. (PArbitrary a, PIsListLike PList a) => PArbitrary (PList a) where
+    parbitrary = genPListLike
 
 -- | @since x.y.z
 instance PArbitrary PPOSIXTime where
@@ -208,7 +242,7 @@ instance PArbitrary PPOSIXTime where
         return $ TestableTerm $ pcon $ PPOSIXTime x
 
 -- | @since x.y.z
-instance {-# OVERLAPPING #-} (PIsData a, PArbitrary a) => PArbitrary (PExtended a) where
+instance (PIsData a, PArbitrary a) => PArbitrary (PExtended a) where
     parbitrary = do
         (TestableTerm x) <- parbitrary
         elements $
@@ -218,7 +252,7 @@ instance {-# OVERLAPPING #-} (PIsData a, PArbitrary a) => PArbitrary (PExtended 
             ]
 
 -- | @since x.y.z
-instance {-# OVERLAPPING #-} (PIsData a, PArbitrary a) => PArbitrary (PLowerBound a) where
+instance (PIsData a, PArbitrary a) => PArbitrary (PLowerBound a) where
     parbitrary = do
         (TestableTerm ex) <- parbitrary
         (TestableTerm cl) <- parbitrary
@@ -226,7 +260,7 @@ instance {-# OVERLAPPING #-} (PIsData a, PArbitrary a) => PArbitrary (PLowerBoun
             pdcons @"_0" # (pdata ex) #$ pdcons @"_1" # (pdata cl) # pdnil
 
 -- | @since x.y.z
-instance {-# OVERLAPPING #-} (PIsData a, PArbitrary a) => PArbitrary (PUpperBound a) where
+instance (PIsData a, PArbitrary a) => PArbitrary (PUpperBound a) where
     parbitrary = do
         (TestableTerm ex) <- parbitrary
         (TestableTerm cl) <- parbitrary
@@ -234,9 +268,64 @@ instance {-# OVERLAPPING #-} (PIsData a, PArbitrary a) => PArbitrary (PUpperBoun
             pdcons @"_0" # (pdata ex) #$ pdcons @"_1" # (pdata cl) # pdnil
 
 -- | @since x.y.z
-instance {-# OVERLAPPING #-} (PIsData a, PArbitrary a) => PArbitrary (PInterval a) where
+instance (PIsData a, PArbitrary a) => PArbitrary (PInterval a) where
     parbitrary = do
         (TestableTerm lo) <- parbitrary
         (TestableTerm up) <- parbitrary
         return $ TestableTerm $ pcon $ PInterval $
             pdcons @"from" # (pdata lo) #$ pdcons @"to" # (pdata up) # pdnil
+
+-- | @since x.y.z
+instance PArbitrary PPubKeyHash where
+    parbitrary = do
+        -- PubKeyHash should be 28 bytes long
+        bs <- genByteString 28
+        return $ TestableTerm $ pcon $ PPubKeyHash $ pconstant bs        
+
+-- | @since x.y.z
+instance PArbitrary PValidatorHash where
+    parbitrary = do
+        -- PubKeyHash should be 28 bytes long        
+        bs <- genByteString 28
+        return $ TestableTerm $ pcon $ PValidatorHash $ pconstant bs
+
+-- | @since x.y.z
+instance PArbitrary PStakeValidatorHash where
+    parbitrary = do
+        -- PubKeyHash should be 28 bytes long        
+        bs <- genByteString 28
+        return $ TestableTerm $ pcon $ PStakeValidatorHash $ pconstant bs        
+
+-- | @since x.y.z
+instance PArbitrary PCredential where
+    parbitrary = do
+        (TestableTerm pk) <- parbitrary
+        (TestableTerm vh) <- parbitrary
+        elements $
+            [ TestableTerm $ pcon $ PScriptCredential $ pdcons @"_0" # (pdata vh) # pdnil
+            , TestableTerm $ pcon $ PPubKeyCredential $ pdcons @"_0" # (pdata pk) # pdnil
+            ]
+
+-- | @since x.y.z
+instance PArbitrary PStakingCredential where
+    parbitrary = do
+        (TestableTerm cred) <- parbitrary
+        (TestableTerm x) <- parbitrary
+        (TestableTerm y) <- parbitrary
+        (TestableTerm z) <- parbitrary                
+        elements $
+            [ TestableTerm $ pcon $ PStakingHash $ pdcons @"_0" # (pdata cred) # pdnil
+            , TestableTerm $ pcon $ PStakingPtr $
+                pdcons @"_0" # (pdata x) #$
+                pdcons @"_1" # (pdata y) #$
+                pdcons @"_2" # (pdata z) # pdnil
+            ]            
+
+-- | @since x.y.z
+instance PArbitrary PAddress where
+    parbitrary = do
+        (TestableTerm cred) <- parbitrary
+        (TestableTerm scred) <- parbitrary
+        return $ TestableTerm $ pcon $ PAddress $
+            pdcons @"credential" # (pdata cred) #$
+            pdcons @"stakingCredential" # (pdata scred) # pdnil
