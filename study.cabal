@@ -52,11 +52,12 @@ common common-lang
     StandaloneDeriving
     TupleSections
     TypeOperators
-    
+
   build-depends:
     , bytestring
     , containers
     , generics-sop
+    , liqwid-plutarch-extra
     , mtl
     , plutarch-extra
     , plutarch-numeric
@@ -66,9 +67,10 @@ common common-lang
     , quickcheck-instances
     , tagged
     , tasty
+    , tasty-expected-failure
     , tasty-quickcheck
     , text
-    , universe    
+    , universe
 
   default-language:   Haskell2010
 
@@ -88,7 +90,9 @@ executable study
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
-  build-depends:    base ^>=4.16.2.0
-                  , study
+  build-depends:
+    , base   ^>=4.16.2.0
+    , study
+
   hs-source-dirs:   app
   default-language: Haskell2010
