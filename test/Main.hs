@@ -25,6 +25,7 @@ import Plutarch.Unsafe (punsafeCoerce)
 import Test.QuickCheck (
     Arbitrary (arbitrary),
     Property,
+    Testable,
     forAllShow,
     resize,
  )
@@ -36,9 +37,12 @@ import Test.Tasty.QuickCheck (testProperty)
 selfEq :: PEq a => Term s (a :--> PBool)
 selfEq = plam $ \x -> x #== x
 
+prop :: (Arbitrary a, Testable prop) => (a -> prop) -> Property
+prop = forAllShow (resize 10 arbitrary) (const "PShow Not Implemented")
+
 unsortedMapProp :: Property
 unsortedMapProp =
-    forAllShow (resize 10 arbitrary) (const "PShow Not Implemented") (fromPFun unsortedMap)
+    prop $ fromPFun unsortedMap
   where
     unsortedMap :: forall s. Term s (PMap Unsorted PInteger PInteger :--> PBool)
     unsortedMap = plam $ \x ->
@@ -46,7 +50,7 @@ unsortedMapProp =
 
 sortedMapProp :: Property
 sortedMapProp =
-    forAllShow (resize 10 arbitrary) (const "PShow Not Implemented") (fromPFun sortedMap)
+    prop $ fromPFun sortedMap
   where
     sortedMap :: Term s (PMap Sorted PInteger PInteger :--> PBool)
     sortedMap = plam $ \x ->
@@ -54,7 +58,7 @@ sortedMapProp =
 
 sortedValueProp :: Property
 sortedValueProp =
-    forAllShow (resize 10 arbitrary) (const "PShow Not Implemented") (fromPFun sortedValue)
+    prop $ fromPFun sortedValue
   where
     sortedValue :: forall s. Term s (PValue Sorted NonZero :--> PBool)
     sortedValue = plam $ \x ->
@@ -62,7 +66,7 @@ sortedValueProp =
 
 positiveSortedValueProp :: Property
 positiveSortedValueProp =
-    forAllShow (resize 10 arbitrary) (const "PShow Not Implemented") (fromPFun positiveSortedValue)
+    prop $ fromPFun positiveSortedValue
   where
     positiveSortedValue :: forall s. Term s (PValue Sorted Positive :--> PBool)
     positiveSortedValue = plam $ \x ->
@@ -70,7 +74,7 @@ positiveSortedValueProp =
 
 unsortedValueProp :: Property
 unsortedValueProp =
-    forAllShow (resize 10 arbitrary) (const "PShow Not Implmented") (fromPFun unsortedValue)
+    prop $ fromPFun unsortedValue
   where
     unsortedValue :: forall s. Term s (PValue Unsorted NoGuarantees :--> PBool)
     unsortedValue = plam $ \x ->
