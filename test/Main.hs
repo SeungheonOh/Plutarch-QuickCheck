@@ -23,37 +23,57 @@ import Lib
 selfEq :: PEq a => Term s (a :--> PBool)
 selfEq = plam $ \x -> x #== x
 
-unsortedMap :: forall s. Term s (PMap Unsorted PInteger PInteger :--> PBool)
-unsortedMap = plam $ \x ->
-    selfEq #$ Assoc.passertSorted # ((punsafeCoerce x) :: Term s (PMap Sorted PInteger PInteger))
+unsortedMapProp :: Property
+unsortedMapProp =
+    forAllShow (resize 10 arbitrary) (const "PShow Not Implemented") (fromPFun unsortedMap)
+    where
+      unsortedMap :: forall s. Term s (PMap Unsorted PInteger PInteger :--> PBool)
+      unsortedMap = plam $ \x ->
+          selfEq #$ Assoc.passertSorted # ((punsafeCoerce x) :: Term s (PMap Sorted PInteger PInteger))
 
-sortedMap :: Term s (PMap Sorted PInteger PInteger :--> PBool)
-sortedMap = plam $ \x ->
-    selfEq #$ Assoc.passertSorted # x
+sortedMapProp :: Property
+sortedMapProp =
+    forAllShow (resize 10 arbitrary) (const "PShow Not Implemented") (fromPFun sortedMap)
+    where
+      sortedMap :: Term s (PMap Sorted PInteger PInteger :--> PBool)
+      sortedMap = plam $ \x ->
+          selfEq #$ Assoc.passertSorted # x
 
-sortedValue :: forall s. Term s (PValue Sorted NonZero :--> PBool)
-sortedValue = plam $ \x ->
-    selfEq #$ Value.passertSorted # x
+sortedValueProp :: Property
+sortedValueProp =
+    forAllShow (resize 10 arbitrary) (const "PShow Not Implemented") (fromPFun sortedValue)
+    where
+      sortedValue :: forall s. Term s (PValue Sorted NonZero :--> PBool)
+      sortedValue = plam $ \x ->
+          selfEq #$ Value.passertSorted # x
+    
+positiveSortedValueProp :: Property
+positiveSortedValueProp =
+    forAllShow (resize 10 arbitrary) (const "PShow Not Implemented") (fromPFun positiveSortedValue)
+    where
+      positiveSortedValue :: forall s. Term s (PValue Sorted Positive :--> PBool)
+      positiveSortedValue = plam $ \x ->
+          selfEq #$ Value.passertPositive # (punsafeCoerce x)
 
-positiveSortedValue :: forall s. Term s (PValue Sorted Positive :--> PBool)
-positiveSortedValue = plam $ \x ->
-    selfEq #$ Value.passertPositive # (punsafeCoerce x)
-
-unsortedValue :: forall s. Term s (PValue Unsorted NoGuarantees :--> PBool)
-unsortedValue = plam $ \x ->
-    selfEq #$ Value.passertSorted # (punsafeCoerce x)
-
+unsortedValueProp :: Property
+unsortedValueProp =
+    forAllShow (resize 10 arbitrary) (const "PShow Not Implmented") (fromPFun unsortedValue)
+    where
+      unsortedValue :: forall s. Term s (PValue Unsorted NoGuarantees :--> PBool)
+      unsortedValue = plam $ \x ->
+          selfEq #$ Value.passertSorted # (punsafeCoerce x)
+    
 main =
     defaultMain $
     testGroup "Tests" $
     [ testGroup "Values" $
-      [ testProperty "Generation of Sorted and Normalized Values" $ fromPFun sortedValue
-      , testProperty "Generation of Sorted, Normalized, and Positve Values" $ fromPFun positiveSortedValue
-      , expectFail $ testProperty "Generation of Unsorted and Un-guaranteed Values" $ fromPFun unsortedValue
+      [ testProperty "Generation of Sorted and Normalized Values" $ sortedValueProp
+      , testProperty "Generation of Sorted, Normalized, and Positve Values" $ positiveSortedValueProp
+      , expectFail $ testProperty "Generation of Unsorted and Un-guaranteed Values" $ unsortedValueProp
       ]
     , testGroup "Map" $
-      [ testProperty "Generation of Sorted PMap" $ fromPFun sortedMap
-      , expectFail $ testProperty "Generation of Unsorted PMap" $ fromPFun unsortedMap
+      [ testProperty "Generation of Sorted PMap" $ sortedMapProp
+      , expectFail $ testProperty "Generation of Unsorted PMap" $ unsortedMapProp
       ]
     ]
 

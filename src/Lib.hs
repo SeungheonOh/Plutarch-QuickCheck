@@ -87,14 +87,14 @@ instance (forall (s :: S). Num (Term s a)) => Num (TestableTerm a) where
 instance (forall (s :: S). Eq (Term s a)) => Eq (TestableTerm a) where
     (TestableTerm x) == (TestableTerm y) = x == y
 
--- instance PShow a => Show (TestableTerm a) where
---     show (TestableTerm term) =
---         let (_, _, trace) = evalScript $ compile $ ptraceError (pshow term)
---          in T.unpack . T.intercalate " " $ trace
+instance PShow a => Show (TestableTerm a) where
+    show (TestableTerm term) =
+        let (_, _, trace) = evalScript $ compile $ ptraceError (pshow term)
+         in T.unpack . T.intercalate " " $ trace
 
 -- TODO: Need a better way for this.
-instance Show (TestableTerm a) where
-    show _ = "<no print instance defined>"
+-- instance Show (TestableTerm a) where
+--     show _ = "<no print instance defined>"
 
 {- | PArbitrary is Plutarch equivalent of `Arbitrary` typeclass from
    QuickCheck. It generates randomized closed term, which can be used
@@ -274,10 +274,10 @@ instance
         return $ TestableTerm $ ptuple # (pdata x) # (pdata y)
 
 genPListLike :: forall b a. (PArbitrary a, PIsListLike b a) => Gen (TestableTerm (b a))
-genPListLike = do
+genPListLike = sized $ \l -> do
     -- Need to find a better way to limit the size of list
     -- So that it doesn't break Plutarch's memory limit.
-    len <- chooseInt (0, 10)
+    len <- chooseInt (0, l)
     xs <- vectorOf len parbitrary
     return $ constrPList xs
   where
