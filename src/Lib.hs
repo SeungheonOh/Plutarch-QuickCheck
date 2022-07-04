@@ -107,19 +107,35 @@ import Test.Tasty ()
 import Test.Tasty.Plutarch.Property ()
 import Test.Tasty.QuickCheck ()
 
+{- | Finds Haskell level TestableTerm equivlance of Plutarch
+     functions. This TypeFamily expects the input Plutarch functions to
+     be returning @PBool@ at the end.
+
+     This is used to find type signatures for @quickCheck@able
+     functions from Plutarch terms like @Term s (a :--> b :--> PBool)@.
+
+ @since x.y.z
+-}
 type family TestableFun (p :: S -> Type) = r | r -> p where
     TestableFun PBool = TestableTerm PBool
     TestableFun (a :--> (b :: S -> Type)) = TestableTerm a -> (TestableFun b)
 
+{- | Converts Plutarch Functions into `Testable` Haskell function of TestableTerms.
+
+ @since x.y.z
+-}
 class FromPFunN (a :: S -> Type) (b :: S -> Type) where
     fromPFun :: (forall s. Term s (a :--> b)) -> TestableFun (a :--> b)
 
+-- | @since x.y.z
 instance {-# OVERLAPPING #-} FromPFunN a PBool where
     fromPFun f = \(TestableTerm x) -> TestableTerm $ f # x
 
+-- | @since x.y.z
 instance forall a b c d. (b ~ (c :--> d), FromPFunN c d) => FromPFunN a b where
     fromPFun f = \(TestableTerm x) -> fromPFun $ f # x
 
+-- | @since x.y.z
 instance Testable (TestableTerm PBool) where
     property (TestableTerm t) = property (plift t)
 
@@ -131,6 +147,7 @@ instance Testable (TestableTerm PBool) where
 -}
 newtype TestableTerm a = TestableTerm (forall s. Term s a)
 
+-- | @since x.y.z
 liftTestable ::
     forall (a :: S -> Type) (b :: S -> Type).
     (forall (s :: S). Term s a -> Term s b) ->
@@ -138,6 +155,7 @@ liftTestable ::
     TestableTerm b
 liftTestable f (TestableTerm x) = TestableTerm $ f x
 
+-- | @since x.y.z
 lift2Testable ::
     forall (a :: S -> Type) (b :: S -> Type) (c :: S -> Type).
     (forall (s :: S). Term s a -> Term s b -> Term s c) ->
@@ -146,6 +164,7 @@ lift2Testable ::
     TestableTerm c
 lift2Testable f (TestableTerm x) (TestableTerm y) = TestableTerm $ f x y
 
+-- | @since x.y.z
 instance (forall (s :: S). Num (Term s a)) => Num (TestableTerm a) where
     (+) = lift2Testable (+)
     (*) = lift2Testable (*)
@@ -154,28 +173,32 @@ instance (forall (s :: S). Num (Term s a)) => Num (TestableTerm a) where
     signum = liftTestable signum
     fromInteger i = TestableTerm $ (fromInteger i :: Term s a)
 
+-- | @since x.y.z
 instance (forall (s :: S). Eq (Term s a)) => Eq (TestableTerm a) where
     (TestableTerm x) == (TestableTerm y) = x == y
 
+{- | For any Plutarch Type that have `PShow` instance, `Show` is
+     available as well. Unfortunately, for those that doesn't have
+     @PShow@, `forAllShow` with custom show function is required to
+     execute property check.
+
+ @since x.y.z
+-}
 instance PShow a => Show (TestableTerm a) where
     show (TestableTerm term) =
         let (_, _, trace) = evalScript $ compile $ ptraceError (pshow term)
          in T.unpack . T.intercalate " " $ trace
 
--- TODO: Need a better way for this.
--- instance Show (TestableTerm a) where
---     show _ = "<no print instance defined>"
-
 {- | PArbitrary is Plutarch equivalent of `Arbitrary` typeclass from
-   QuickCheck. It generates randomized closed term, which can be used
-   to test property over Plutarch code without compiling and evaluating.
+     QuickCheck. It generates randomized closed term, which can be used
+     to test property over Plutarch code without compiling and evaluating.
 
-   Default implmentation is given for any Plutarch types that
-   implments @PLift a@ and @Arbitrary (PLifted a)@. This will Generate
-   a haskell value and convert that into Plutarch term using `pconstant`.
+     Default implmentation is given for any Plutarch types that
+     implments @PLift a@ and @Arbitrary (PLifted a)@. This will Generate
+     a haskell value and convert that into Plutarch term using `pconstant`.
 
-   Other more complex Plutarch types, like `PMaybe`, requires mannual
-   implmentation.
+     Other more complex Plutarch types, like `PMaybe`, requires mannual
+     implmentation.
 
  @since x.y.z
 -}
@@ -345,8 +368,6 @@ instance
 
 genPListLike :: forall b a. (PArbitrary a, PIsListLike b a) => Gen (TestableTerm (b a))
 genPListLike = sized $ \l -> do
-    -- Need to find a better way to limit the size of list
-    -- So that it doesn't break Plutarch's memory limit.
     len <- chooseInt (0, l)
     xs <- vectorOf len parbitrary
     return $ constrPList xs
