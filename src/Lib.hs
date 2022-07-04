@@ -11,31 +11,101 @@
 
 module Lib where
 
-import Data.ByteString
-import qualified GHC.Exts as Exts
-import Test.QuickCheck hiding (NonZero, Positive, Sorted)
-import Test.Tasty
-import Test.Tasty.QuickCheck hiding (NonZero, Positive, Sorted)
-
-import qualified Data.Text as T
-import Plutarch
-import Plutarch.Api.V1
-import qualified Plutarch.Api.V1.AssocMap as Assoc
-import qualified "plutarch" Plutarch.Api.V1.Value as Value
-import Plutarch.Api.V1.Time
-import Plutarch.Api.V1.Tuple
-import Plutarch.Builtin
-import Plutarch.DataRepr
-import Plutarch.Evaluate
-import Plutarch.Extra.Map.Unsorted
-import Plutarch.Lift
-import Plutarch.List
-import Plutarch.Prelude
-import Plutarch.Rational
-import Plutarch.Show
-import Plutarch.Unsafe
-
-import Test.Tasty.Plutarch.Property
+import Data.ByteString (ByteString)
+import qualified Data.Text as T (intercalate, pack, unpack)
+import qualified GHC.Exts as Exts (IsList (fromList))
+import Plutarch (
+    PCon (pcon),
+    S,
+    Term,
+    compile,
+    plam,
+    pto,
+    (#),
+    (#$),
+    type (:-->),
+ )
+import Plutarch.Api.V1 (
+    AmountGuarantees (NoGuarantees, NonZero, Positive),
+    KeyGuarantees (Sorted, Unsorted),
+    PAddress (..),
+    PCredential (..),
+    PCurrencySymbol (..),
+    PExtended (..),
+    PInterval (..),
+    PLowerBound (..),
+    PMap (..),
+    PMaybeData (..),
+    PPOSIXTime,
+    PPubKeyHash (..),
+    PStakeValidatorHash (..),
+    PStakingCredential (..),
+    PTokenName (..),
+    PTuple,
+    PUpperBound (..),
+    PValidatorHash (..),
+    PValue (..),
+    ptuple,
+ )
+import qualified Plutarch.Api.V1.AssocMap as Assoc (
+    pfilter,
+    pmap,
+ )
+import Plutarch.Api.V1.Time (PPOSIXTime (PPOSIXTime))
+import Plutarch.Api.V1.Tuple (pbuiltinPairFromTuple)
+import qualified "plutarch" Plutarch.Api.V1.Value as Value (
+    pnormalize,
+ )
+import Plutarch.Builtin (
+    PAsData,
+    PBuiltinList,
+    PBuiltinPair,
+    PIsData,
+    pdata,
+    pfromData,
+ )
+import Plutarch.DataRepr (pdcons, pdnil)
+import Plutarch.Evaluate (evalScript)
+import Plutarch.Extra.Map.Unsorted (psort)
+import Plutarch.Lift (
+    PLift,
+    PUnsafeLiftDecl (PLifted),
+    pconstant,
+    plift,
+ )
+import Plutarch.List (PIsListLike, PList, PListLike (pcons, pnil))
+import Plutarch.Prelude (
+    PBool,
+    PByteString,
+    PEither (..),
+    PEq ((#==)),
+    PInteger,
+    PMaybe (..),
+    POrd (..),
+    PPair (..),
+    PRational,
+    PString,
+    PUnit,
+    Type,
+    pnot,
+    pshow,
+    ptraceError,
+ )
+import Plutarch.Rational (PRational (PRational))
+import Plutarch.Show (PShow)
+import Plutarch.Unsafe ()
+import Test.QuickCheck (
+    Arbitrary (arbitrary),
+    Gen,
+    Testable (property),
+    chooseInt,
+    elements,
+    sized,
+    vectorOf,
+ )
+import Test.Tasty ()
+import Test.Tasty.Plutarch.Property ()
+import Test.Tasty.QuickCheck ()
 
 type family TestableFun (p :: S -> Type) = r | r -> p where
     TestableFun PBool = TestableTerm PBool
@@ -455,9 +525,9 @@ instance PArbitrary (PValue Sorted NonZero) where
         (TestableTerm val) <- parbitrary
         return $
             TestableTerm $
-            Value.pnormalize #$
-                pcon $
-                    PValue $
+                Value.pnormalize
+                    #$ pcon
+                    $ PValue $
                         Assoc.pmap # (plam $ \x -> Assoc.pfilter # (plam $ \y -> pnot # (y #== 0)) # x) # val
 
 -- | @since x.y.z
