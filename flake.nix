@@ -16,7 +16,7 @@
 
   inputs.plutarch-quickcheck.url = "github:liqwid-labs/plutarch-quickcheck?rev=a560e12b4809c0f292c96e81189e1b2cf2e7f7eb";
   inputs.plutarch-numeric.url = "github:liqwid-labs/plutarch-numeric";
-  inputs.liqwid-plutarch-extra.url = "github:liqwid-labs/liqwid-plutarch-extra";
+  inputs.liqwid-plutarch-extra.url = "path:/home/sho/Documents/liqwid-plutarch-extra";
 
   outputs = inputs@{ self, nixpkgs, nixpkgs-latest, haskell-nix, plutarch, ... }:
     let
