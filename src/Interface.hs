@@ -1,8 +1,10 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
@@ -10,26 +12,24 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE ConstraintKinds #-}
 
 module Interface where
 
-import Generics.SOP 
-import Plutarch
-import Plutarch.Show
-import Plutarch.Prelude
-import Plutarch.Lift
-import Function
-import Lib
-import Data.Universe
-import Test.QuickCheck.Function
-import Test.QuickCheck
 import Control.Arrow
+import Data.Kind
+import Data.List
+import Data.Universe
+import Function
+import Generics.SOP
+import Lib
+import Plutarch
 import "liqwid-plutarch-extra" Plutarch.Extra.List
 import Plutarch.Extra.Maybe
-import Data.List
-import Data.Kind
+import Plutarch.Lift
+import Plutarch.Prelude
+import Plutarch.Show
+import Test.QuickCheck
+import Test.QuickCheck.Function
 
 type family IsPLam (p :: S -> Type) :: Bool where
     IsPLam ((a :--> b) :--> c) = True
@@ -57,13 +57,16 @@ class FromPFunN (a :: S -> Type) (b :: S -> Type) where
     fromPFun :: (forall s. Term s (a :--> b)) -> TestableFun (IsPLam (a :--> b)) (a :--> b)
 
 -- | @since x.y.z
-instance {-# OVERLAPPING #-} forall a b aa ab.
+instance
+    {-# OVERLAPPING #-}
+    forall a b aa ab.
     ( a ~ (aa :--> ab)
-    , IsPLam (a :--> b) ~ True  
+    , IsPLam (a :--> b) ~ True
     , PLift aa
     , PLift ab
     ) =>
-    FromPFunN (aa :--> ab) PBool where
+    FromPFunN (aa :--> ab) PBool
+    where
     fromPFun f = \(PFn x) -> TestableTerm $ f # x
 
 -- | @since x.y.z
@@ -71,7 +74,9 @@ instance {-# OVERLAPPING #-} (IsPLam (a :--> PBool) ~ False) => FromPFunN a PBoo
     fromPFun f = \(TestableTerm x) -> TestableTerm $ f # x
 
 -- | @since x.y.z
-instance {-# OVERLAPPING #-} forall aa ab a b c d.
+instance
+    {-# OVERLAPPING #-}
+    forall aa ab a b c d.
     ( b ~ (c :--> d)
     , a ~ (aa :--> ab)
     , IsPLam (a :--> b) ~ True
@@ -79,16 +84,20 @@ instance {-# OVERLAPPING #-} forall aa ab a b c d.
     , PLift aa
     , PLift ab
     ) =>
-    FromPFunN (aa :--> ab) b where
+    FromPFunN (aa :--> ab) b
+    where
     fromPFun f = \(PFn x) -> fromPFun $ f # x
 
 -- | @since x.y.z
-instance {-# OVERLAPPING #-} forall a b c d.
+instance
+    {-# OVERLAPPING #-}
+    forall a b c d.
     ( b ~ (c :--> d)
     , FromPFunN c d
     , IsPLam (a :--> b) ~ False
     ) =>
-    FromPFunN a b where
+    FromPFunN a b
+    where
     fromPFun f = \(TestableTerm x) -> fromPFun $ f # x
 
 {- | Extracts all @TestableTerm@s from give Plutarch function.
@@ -120,7 +129,9 @@ instance
     , PLifted pa ~ ha
     , PLift pa
     , PShow pa
-    ) => HaskEquiv (ha -> hb) (pa :--> pb) (TestableTerm pa ': hbArgs) where
+    ) =>
+    HaskEquiv (ha -> hb) (pa :--> pb) (TestableTerm pa ': hbArgs)
+    where
     haskEquiv h (TestableTerm p) (g :* gs) =
         forAll g $ \(TestableTerm x) -> haskEquiv (h $ plift x) (TestableTerm $ p # x) gs
 
@@ -139,5 +150,7 @@ haskEquiv' ::
     , HaskEquiv h p args
     , All Arbitrary args
     ) =>
-    h -> (forall s. Term s p) -> Property
+    h ->
+    (forall s. Term s p) ->
+    Property
 haskEquiv' h p = haskEquiv h (TestableTerm p) $ hcpure (Proxy @Arbitrary) arbitrary

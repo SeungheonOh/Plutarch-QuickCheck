@@ -1,17 +1,13 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Main where
 
-import Lib
-import PlutusCore.Data
-import Plutarch
+import Generics.SOP hiding (Fn, I)
 import Interface
-import Test.QuickCheck.Function
-import Plutarch.Internal
-import Plutarch.Prelude
-import Plutarch.List
+import Lib
+import Plutarch
 import Plutarch.Api.V1 (
     AmountGuarantees (NoGuarantees, NonZero, Positive),
     KeyGuarantees (Sorted, Unsorted),
@@ -25,28 +21,32 @@ import "plutarch" Plutarch.Api.V1.Value qualified as Value (
     passertPositive,
     passertSorted,
  )
-import "liqwid-plutarch-extra" Plutarch.Extra.List    
 import Plutarch.Evaluate
+import "liqwid-plutarch-extra" Plutarch.Extra.List
+import "liqwid-plutarch-extra" Plutarch.Extra.List (preverse)
+import Plutarch.Internal
 import Plutarch.Lift ()
+import Plutarch.List
+import Plutarch.Prelude
 import Plutarch.Prelude (PBool, PEq (..), PInteger)
 import Plutarch.Show ()
 import Plutarch.Unsafe (punsafeCoerce)
+import PlutusCore.Data
 import Test.QuickCheck (
     Arbitrary (arbitrary),
     Property,
     Testable,
-    forAllShow,
-    resize,
     forAll,
+    forAllShow,
     forAllShrink,
+    resize,
     shrink,
  )
+import Test.QuickCheck.Function
 import Test.Tasty (defaultMain, testGroup)
 import Test.Tasty.ExpectedFailure (expectFail)
 import Test.Tasty.Plutarch.Property ()
-import Test.Tasty.QuickCheck (testProperty, Gen, withMaxSuccess, Fun, applyFun)
-import "liqwid-plutarch-extra" Plutarch.Extra.List (preverse)
-import Generics.SOP hiding (I, Fn)
+import Test.Tasty.QuickCheck (Fun, Gen, applyFun, testProperty, withMaxSuccess)
 
 selfEq :: PEq a => Term s (a :--> PBool)
 selfEq = plam $ \x -> x #== x
@@ -96,14 +96,14 @@ unsortedValueProp =
 
 addoneProp :: Property
 addoneProp =
-    haskEquiv (+1) (TestableTerm addone) (customGen :* Nil)
-    where
-      customGen :: Gen (TestableTerm PInteger)
-      customGen = do
-          n <- abs <$> arbitrary
-          return $ TestableTerm $ pconstant n
-      addone :: Term s (PInteger :--> PInteger)
-      addone = plam $ \x -> x + 1
+    haskEquiv (+ 1) (TestableTerm addone) (customGen :* Nil)
+  where
+    customGen :: Gen (TestableTerm PInteger)
+    customGen = do
+        n <- abs <$> arbitrary
+        return $ TestableTerm $ pconstant n
+    addone :: Term s (PInteger :--> PInteger)
+    addone = plam $ \x -> x + 1
 
 reverseProp :: Property
 reverseProp =
@@ -111,38 +111,41 @@ reverseProp =
 
 testProp :: Property
 testProp = forAllShrink arbitrary shrink $ fromPFun test
-    where
-      test :: forall s. Term s (PList PInteger :--> PBool)
-      test = plam $ \x -> pnot #$ pelem # 5 # x #&& plength # x #== 3
+  where
+    test :: forall s. Term s (PList PInteger :--> PBool)
+    test = plam $ \x -> pnot #$ pelem # 5 # x #&& plength # x #== 3
 
 testProp3 :: Property
 testProp3 = forAllShrink arbitrary shrink $ fromPFun test
-    where
-      test :: forall s. Term s (PList (PList PInteger) :--> PBool)
-      test = plam $ \x -> pnot #$ pelem # pnil # x #&& plength # x #== 10
+  where
+    test :: forall s. Term s (PList (PList PInteger) :--> PBool)
+    test = plam $ \x -> pnot #$ pelem # pnil # x #&& plength # x #== 10
 
 testProp6 :: Property
 testProp6 = forAllShrink arbitrary shrink $ fromPFun test
-    where
-      test :: Term s ((PInteger :--> PBool) :-->
-                      (PInteger :--> PInteger) :-->
-                      PBuiltinList PInteger :-->
-                      PBool)
-      test = plam $ \f g x -> 
-          pfilter # f # (pmap # g # x) #== pmap # g # (pfilter # f # x)
+  where
+    test ::
+        Term
+            s
+            ( (PInteger :--> PBool)
+                :--> (PInteger :--> PInteger)
+                :--> PBuiltinList PInteger
+                :--> PBool
+            )
+    test = plam $ \f g x ->
+        pfilter # f # (pmap # g # x) #== pmap # g # (pfilter # f # x)
 
 testProp5 :: Property
 testProp5 = forAll arbitrary test
-    where
-      test (Fn f) (Fn g) (x :: [Integer]) = filter f (map g x) == map g (filter f x)
+  where
+    test (Fn f) (Fn g) (x :: [Integer]) = filter f (map g x) == map g (filter f x)
 
 main = do
     defaultMain $
         testGroup "Tests" $
             [ testGroup "Fun gen" $
-                [ 
-                -- , testProperty "Fun gen" $ testProp5
-                testProperty "Fun gen" $ testProp6                
+                [ -- , testProperty "Fun gen" $ testProp5
+                  testProperty "Fun gen" $ testProp6
                 ]
             , testGroup "Values" $
                 [ testProperty "Generation of Sorted and Normalized Values" $ withMaxSuccess 1000 $ sortedValueProp

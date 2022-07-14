@@ -71,16 +71,18 @@ common common-lang
     , tasty-quickcheck
     , text
     , universe
-    , plutus-core
+
   default-language:   Haskell2010
 
 -- Libraries
 
 library
   import:          common-lang
-  exposed-modules: Lib
-                 , Function
-                 , Interface
+  exposed-modules:
+    Function
+    Interface
+    Lib
+
   hs-source-dirs:  src
 
 executable study
@@ -93,7 +95,7 @@ executable study
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
   build-depends:
-    , base   ^>=4.16.2.0
+    , base      ^>=4.16.2.0
     , study
     , universe
 
