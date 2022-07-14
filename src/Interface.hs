@@ -20,7 +20,7 @@ import Data.Kind
 import Data.List
 import Data.Universe
 import Function
-import Generics.SOP
+import Generics.SOP hiding (And)
 import Lib
 import Plutarch
 import "liqwid-plutarch-extra" Plutarch.Extra.List
@@ -31,9 +31,27 @@ import Plutarch.Show
 import Test.QuickCheck
 import Test.QuickCheck.Function
 
+data PTermType
+    = LastPFunction
+    | LastPTerm
+    | PFunction
+    | PTerm
+
+type family PTT' isplam end :: PTermType where
+    PTT' True True = LastPFunction
+    PTT' False True = LastPTerm
+    PTT' True False = PFunction
+    PTT' False False = PTerm
+
+type PTT (p :: S -> Type) = PTT' (IsPLam p) (IsLast p)
+
 type family IsPLam (p :: S -> Type) :: Bool where
     IsPLam ((a :--> b) :--> c) = True
     IsPLam _ = False
+
+type family IsLast (p :: S -> Type) :: Bool where
+    IsLast (a :--> PBool) = True
+    IsLast _ = False
 
 {- | Finds Haskell level TestableTerm equivlance of Plutarch
      functions. This TypeFamily expects the input Plutarch functions to
@@ -44,61 +62,60 @@ type family IsPLam (p :: S -> Type) :: Bool where
 
  @since x.y.z
 -}
-type family TestableFun (b :: Bool) (p :: S -> Type) where
-    TestableFun False PBool = TestableTerm PBool
-    TestableFun False (a :--> b) = TestableTerm a -> (TestableFun (IsPLam b) b)
-    TestableFun True ((a :--> b) :--> c) = PFun a b -> (TestableFun (IsPLam c) c)
+type family TestableFun (b :: PTermType) (p :: S -> Type) where
+    TestableFun _ PBool = TestableTerm PBool
+    TestableFun PTerm (a :--> b) = TestableTerm a -> (TestableFun (PTT b) b)
+    TestableFun LastPTerm (a :--> b) = TestableTerm a -> (TestableFun (PTT b) b)
+    TestableFun PFunction ((a :--> b) :--> c) = PFun a b -> (TestableFun (PTT c) c)
+    TestableFun LastPFunction ((a :--> b) :--> c) = PFun a b -> (TestableFun (PTT c) c)
+
+class FromPFunN (a :: S -> Type) (b :: S -> Type) (c :: PTermType) where
+    fromPFun' :: Proxy c -> (forall s. Term s (a :--> b)) -> TestableFun c (a :--> b)
+
+instance
+    forall a b.
+    ( PLift a
+    , PLift b
+    ) =>
+    FromPFunN (a :--> b) PBool LastPFunction
+    where
+    fromPFun' _ f = \(PFn x) -> TestableTerm $ f # x
+
+instance FromPFunN a PBool LastPTerm where
+    fromPFun' _ f = \(TestableTerm x) -> TestableTerm $ f # x
+
+instance
+    forall a b c d e.
+    ( c ~ (d :--> e)
+    , PLift a
+    , PLift b
+    , FromPFunN d e (PTT c)
+    ) =>
+    FromPFunN (a :--> b) c PFunction
+    where
+    fromPFun' _ f = \(PFn x) -> fromPFun' (Proxy @(PTT c)) $ f # x
+
+instance
+    forall a b c d.
+    ( b ~ (c :--> d)
+    , FromPFunN c d (PTT b)
+    ) =>
+    FromPFunN a b PTerm
+    where
+    fromPFun' _ f = \(TestableTerm x) -> fromPFun' (Proxy @(PTT b)) $ f # x
 
 {- | Converts Plutarch Functions into `Testable` Haskell function of TestableTerms.
 
  @since x.y.z
 -}
-class FromPFunN (a :: S -> Type) (b :: S -> Type) where
-    fromPFun :: (forall s. Term s (a :--> b)) -> TestableFun (IsPLam (a :--> b)) (a :--> b)
-
--- | @since x.y.z
-instance
-    {-# OVERLAPPING #-}
-    forall a b aa ab.
-    ( a ~ (aa :--> ab)
-    , IsPLam (a :--> b) ~ True
-    , PLift aa
-    , PLift ab
+fromPFun ::
+    forall a b c.
+    ( c ~ PTT (a :--> b)
+    , FromPFunN a b c
     ) =>
-    FromPFunN (aa :--> ab) PBool
-    where
-    fromPFun f = \(PFn x) -> TestableTerm $ f # x
-
--- | @since x.y.z
-instance {-# OVERLAPPING #-} (IsPLam (a :--> PBool) ~ False) => FromPFunN a PBool where
-    fromPFun f = \(TestableTerm x) -> TestableTerm $ f # x
-
--- | @since x.y.z
-instance
-    {-# OVERLAPPING #-}
-    forall aa ab a b c d.
-    ( b ~ (c :--> d)
-    , a ~ (aa :--> ab)
-    , IsPLam (a :--> b) ~ True
-    , FromPFunN c d
-    , PLift aa
-    , PLift ab
-    ) =>
-    FromPFunN (aa :--> ab) b
-    where
-    fromPFun f = \(PFn x) -> fromPFun $ f # x
-
--- | @since x.y.z
-instance
-    {-# OVERLAPPING #-}
-    forall a b c d.
-    ( b ~ (c :--> d)
-    , FromPFunN c d
-    , IsPLam (a :--> b) ~ False
-    ) =>
-    FromPFunN a b
-    where
-    fromPFun f = \(TestableTerm x) -> fromPFun $ f # x
+    (forall s. Term s (a :--> b)) ->
+    TestableFun c (a :--> b)
+fromPFun f = fromPFun' (Proxy @(PTT (a :--> b))) f
 
 {- | Extracts all @TestableTerm@s from give Plutarch function.
 
