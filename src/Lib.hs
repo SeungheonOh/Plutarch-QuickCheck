@@ -9,9 +9,12 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE GADTs #-}
 
 module Lib where
 
+import qualified UntypedPlutusCore as UPLC
+import qualified PlutusLedgerApi.V1.Scripts as Scripts
 import Data.ByteString (ByteString)
 import qualified Data.Text as T (intercalate, pack, unpack)
 import qualified GHC.Exts as Exts 
@@ -46,7 +49,6 @@ import qualified Plutarch.Api.V1.AssocMap as Assoc (
     pmap,
  )
 import Plutarch.Extra.Maybe
-import Plutarch.Extra.Stream
 import Plutarch.Api.V1.Time (PPOSIXTime (PPOSIXTime))
 import Plutarch.Api.V1.Tuple 
 import qualified "plutarch" Plutarch.Api.V1.Value as Value (
@@ -65,112 +67,20 @@ import Plutarch.Evaluate (evalScript)
 import Plutarch.Extra.Map.Unsorted (psort)
 import Plutarch.Lift (
     PLift,
+    plift,
     PUnsafeLiftDecl ,    
     PUnsafeLiftDecl (PLifted),
     pconstant,
-    plift,
  )
 import Plutarch.List (PIsListLike, PList, PListLike (pcons, pnil))
-import Plutarch.Prelude
+import Plutarch.Prelude hiding (plift)
 import Plutarch.Rational
+import Plutarch.Internal
 import Plutarch.Show (PShow)
 import Plutarch.Unsafe ()
 import Test.QuickCheck hiding (Sorted, NonZero, Positive)
-import Generics.SOP    
-
-{- | Finds Haskell level TestableTerm equivlance of Plutarch
-     functions. This TypeFamily expects the input Plutarch functions to
-     be returning @PBool@ at the end.
-
-     This is used to find type signatures for @quickCheck@able
-     functions from Plutarch terms like @Term s (a :--> b :--> PBool)@.
-
- @since x.y.z
--}
-type family TestableFun (p :: S -> Type) = r | r -> p where
-    TestableFun PBool = TestableTerm PBool
-    TestableFun (a :--> (b :: S -> Type)) = TestableTerm a -> (TestableFun b)
-
-{- | Converts Plutarch Functions into `Testable` Haskell function of TestableTerms.
-
- @since x.y.z
--}
-class FromPFunN (a :: S -> Type) (b :: S -> Type) where
-    fromPFun :: (forall s. Term s (a :--> b)) -> TestableFun (a :--> b)
-
--- | @since x.y.z
-instance {-# OVERLAPPING #-} FromPFunN a PBool where
-    fromPFun f = \(TestableTerm x) -> TestableTerm $ f # x
-
--- | @since x.y.z
-instance forall a b c d. (b ~ (c :--> d), FromPFunN c d) => FromPFunN a b where
-    fromPFun f = \(TestableTerm x) -> fromPFun $ f # x
-
--- type family FromTestableFun (tp :: Type) where
---     FromTestableFun (TestableTerm p) = p
---     FromTestableFun (TestableTerm p -> ps) = p :--> FromTestableFun ps
-
--- class PTestableLam (a :: Type) (b :: Type) where
---     ptestableLam :: (a -> b) -> (forall s. Term s (FromTestableFun (a -> b)))
-
--- instance PTestableLam (TestableTerm a) (TestableTerm b) where
---     ptestableLam f' = undefined
---         where
---           -- f :: Term s (a :--> b)
---           -- f = plam' (\y -> let (TestableTerm x) = f' (TestableTerm y) in x)
-
---           test :: (forall s. Term s a) -> Term s b
---           test x = let (TestableTerm y) = f' $ TestableTerm $ x in y
-        
-
-{- | Extracts all @TestableTerm@s from give Plutarch function.
-
- @since x.y.z
--}
-type family PLamArgs (p :: S -> Type) :: [Type] where
-    PLamArgs (a :--> b) = TestableTerm a : (PLamArgs b)
-    PLamArgs _ = '[]
-
-{- | Make property by directly comparing behavior of Plutarch function
-     to Haskell counterpart.  This function will expect all Plutarch
-     types to be `plift`able and `pshow`able.  With given TestableTerm
-     generator, it will generate value for each arguments. Then, it
-     will apply generated value and lifted value to Plutarch and
-     haskell function. Once all arguments are applied, It will check
-     the equality of results.
-
- @since x.y.z
--}
-class (PLamArgs p ~ args) => HaskEquiv (h :: Type) (p :: S -> Type) args where
-    haskEquiv :: h -> TestableTerm p -> NP Gen args -> Property
-
-instance
-    forall ha hb pa pb hbArgs.
-    ( PLamArgs pb ~ hbArgs
-    , HaskEquiv hb pb hbArgs
-    , PLifted pa ~ ha
-    , PLift pa
-    , PShow pa
-    ) => HaskEquiv (ha -> hb) (pa :--> pb) (TestableTerm pa ': hbArgs) where
-    haskEquiv h (TestableTerm p) (g :* gs) =
-        forAll g $ \(TestableTerm x) -> haskEquiv (h $ plift x) (TestableTerm $ p # x) gs
-
-instance (PLamArgs p ~ '[], PLift p, PLifted p ~ h, Eq h) => HaskEquiv h p '[] where
-    haskEquiv h (TestableTerm p) _ = property $ plift p == h
-
-{- | Simplified version of `haskEquiv`. It will use arbitrary instead of
-     asking custom generators.
-
- @since x.y.z
--}
-haskEquiv' ::
-    forall h p args.
-    ( PLamArgs p ~ args
-    , HaskEquiv h p args
-    , All Arbitrary args
-    ) =>
-    h -> (forall s. Term s p) -> Property
-haskEquiv' h p = haskEquiv h (TestableTerm p) $ hcpure (Proxy @Arbitrary) arbitrary
+import Test.QuickCheck.Function
+import Generics.SOP 
     
 -- | @since x.y.z
 instance Testable (TestableTerm PBool) where
@@ -185,7 +95,7 @@ instance Testable (TestableTerm PBool) where
 
  @since x.y.z
 -}
-newtype TestableTerm a = TestableTerm (forall s. Term s a)
+data TestableTerm a = TestableTerm {unTestableTerm :: (forall s. Term s a)}
 
 -- | @since x.y.z
 liftTestable ::
@@ -575,7 +485,8 @@ constrPList ((TestableTerm x) : xs) =
 
 convToList :: (PIsListLike b a) => TestableTerm (b a) -> [TestableTerm a]
 convToList (TestableTerm x)
-    | not $ plift $ pnull # x = TestableTerm (phead # x) : convToList (TestableTerm $ ptail # x)
+    | not $ plift $ pnull # x =
+       (TestableTerm (phead # x)) : convToList (TestableTerm $ ptail # x)
     | otherwise = []
 
 genPListLike :: forall b a. (PArbitrary a, PIsListLike b a) => Gen (TestableTerm (b a))
@@ -612,7 +523,7 @@ eshrinkPBIL xs' = (psimplify . constrPList) <$> shrink (convToList xs')
 
 -- | @since x.y.z
 instance (PArbitrary a, PIsListLike PBuiltinList a) => PArbitrary (PBuiltinList a) where
-    parbitrary = genPListLike
+    parbitrary = constrPList <$> arbitrary 
     pshrink = shrinkPListLike
 
 instance (PCoArbitrary a, PIsListLike PBuiltinList a) => PCoArbitrary (PBuiltinList a) where
@@ -626,14 +537,6 @@ instance (PArbitrary a, PIsListLike PList a) => PArbitrary (PList a) where
 instance (PCoArbitrary a, PIsListLike PList a) => PCoArbitrary (PList a) where
     pcoarbitrary = coArbitraryPListLike    
 
--- | @since x.y.z
-instance (PArbitrary a, PIsListLike PStream a) => PArbitrary (PStream a) where
-    parbitrary = genPListLike
-    pshrink = shrinkPListLike
-
-instance (PCoArbitrary a, PIsListLike PStream a) => PCoArbitrary (PStream a) where
-    pcoarbitrary = coArbitraryPListLike        
-    
 -- | @since x.y.z
 instance
     ( PArbitrary a

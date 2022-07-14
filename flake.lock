@@ -2250,11 +2250,11 @@
     "haskell-language-server": {
       "flake": false,
       "locked": {
-        "lastModified": 1657114582,
-        "narHash": "sha256-s5w143+K/0e86awsxRaIazXtKFqpKKHV7b9Fm0ZKU2k=",
+        "lastModified": 1657274876,
+        "narHash": "sha256-mQSmEqDJuFtfCJzteOqtAgE+bW+2lfLwmpLZcBusCYQ=",
         "owner": "haskell",
         "repo": "haskell-language-server",
-        "rev": "a32db0b296d16611def15fb1d7d377fa0505beea",
+        "rev": "12095b2e530f23015d07fd1ae36c4152da68b9ad",
         "type": "github"
       },
       "original": {
@@ -3807,8 +3807,8 @@
         "plutarch-quickcheck": "plutarch-quickcheck"
       },
       "locked": {
-        "lastModified": 1657126214,
-        "narHash": "sha256-LBF2ijAUZ/ZBB3sA23Tn1/9ceVbw7mr4LspOcOrYy6Q=",
+        "lastModified": 1657324296,
+        "narHash": "sha256-OhXlMJ9A/p4KS/0DPqSP5XfQ4IcRM8iOQuPEq47To+8=",
         "path": "/home/sho/Documents/liqwid-plutarch-extra",
         "type": "path"
       },
