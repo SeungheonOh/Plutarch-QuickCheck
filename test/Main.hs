@@ -1,14 +1,20 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Main where
 
+import Function
 import Generics.SOP hiding (Fn, I)
 import Interface
 import Lib
 import Plutarch
+import Plutarch.Show
 import Plutarch.Api.V1 (
+    PMaybeData,
     AmountGuarantees (NoGuarantees, NonZero, Positive),
     KeyGuarantees (Sorted, Unsorted),
     PMap,
@@ -22,10 +28,11 @@ import "plutarch" Plutarch.Api.V1.Value qualified as Value (
     passertSorted,
  )
 import Plutarch.Evaluate
+import Plutarch.Extra.Functor
 import "liqwid-plutarch-extra" Plutarch.Extra.List
 import "liqwid-plutarch-extra" Plutarch.Extra.List (preverse)
 import Plutarch.Internal
-import Plutarch.Lift ()
+import Plutarch.Lift
 import Plutarch.List
 import Plutarch.Prelude
 import Plutarch.Prelude (PBool, PEq (..), PInteger)
@@ -39,8 +46,11 @@ import Test.QuickCheck (
     forAll,
     forAllShow,
     forAllShrink,
+    forAllShrinkShow,    
+    property,
     resize,
     shrink,
+    (.&&.),
  )
 import Test.QuickCheck.Function
 import Test.Tasty (defaultMain, testGroup)
@@ -116,10 +126,10 @@ testProp = forAllShrink arbitrary shrink $ fromPFun test
     test = plam $ \x -> pnot #$ pelem # 5 # x #&& plength # x #== 3
 
 testProp3 :: Property
-testProp3 = forAllShrink arbitrary shrink $ fromPFun test
+testProp3 = forAllShrink arbitrary shrinkPLift $ fromPFun test
   where
-    test :: forall s. Term s (PList (PList PInteger) :--> PBool)
-    test = plam $ \x -> pnot #$ pelem # pnil # x #&& plength # x #== 10
+    test :: forall s. Term s (PBuiltinList PInteger :--> PBool)
+    test = plam $ \x -> pnot #$ pelem # 3 # x #&& plength # x #== 10
 
 testProp6 :: Property
 testProp6 = forAllShrink arbitrary shrink $ fromPFun test
@@ -135,17 +145,50 @@ testProp6 = forAllShrink arbitrary shrink $ fromPFun test
     test = plam $ \f g x ->
         pfilter # f # (pmap # g # x) #== pmap # g # (pfilter # f # x)
 
-testProp5 :: Property
-testProp5 = forAll arbitrary test
+functorLaw :: forall (a :: (S -> Type) -> S -> Type).
+    ( PFunctor a, PEq (a PInteger)
+    , PSubcategory a PInteger
+    , PArbitrary (a PInteger)
+    , IsPLam ((a PInteger) :--> PBool) ~ False
+    ) =>
+    Property
+functorLaw =
+    ( forAllShrink (resize 10 arbitrary) shrink $ \x ->
+        forAllShrink (resize 10 arbitrary) shrink $ \y ->
+            forAllShrinkShow
+                (resize 20 arbitrary)
+                (shrink)
+                (const "")
+                $ \z ->
+                    (fromPFun composition) x y z
+    )
+        .&&. (forAllShrinkShow arbitrary shrink (const "") (fromPFun identity))
   where
-    test (Fn f) (Fn g) (x :: [Integer]) = filter f (map g x) == map g (filter f x)
+    composition ::
+        Term
+            s
+            ( (PInteger :--> PInteger)
+                :--> (PInteger :--> PInteger)
+                :--> (a PInteger)
+                :--> PBool
+            )
+    composition = plam $ \f g x ->
+        (pfmap # (plam $ \y -> g #$ f # y) # x) #== (pfmap # g # (pfmap # f # x))
+
+    identity :: Term s ((a PInteger) :--> PBool)
+    identity = plam $ \x ->
+        (pfmap # (plam id) # x) #== x
 
 main = do
     defaultMain $
         testGroup "Tests" $
-            [ testGroup "Fun gen" $
-                [ -- , testProperty "Fun gen" $ testProp5
-                  testProperty "Fun gen" $ testProp6
+            [ testGroup "Functors" $
+                [ testProperty "PBuiltinList is Functor" $ withMaxSuccess 5000 $ (functorLaw @PBuiltinList)
+                , testProperty "PMaybeData is Functor" $ withMaxSuccess 5000 $ (functorLaw @PMaybeData)
+                , testProperty "PMaybe is Functor" $ withMaxSuccess 5000 $ (functorLaw @PMaybe)
+                , testProperty "PEither is Functor" $ withMaxSuccess 5000 $ (functorLaw @(PEither PUnit))
+                , testProperty "PList is Functor" $ withMaxSuccess 5000 $ (functorLaw @PList)
+                , testProperty "PMap is Functor" $ withMaxSuccess 5000 $ (functorLaw @(PMap Unsorted PInteger))
                 ]
             , testGroup "Values" $
                 [ testProperty "Generation of Sorted and Normalized Values" $ withMaxSuccess 1000 $ sortedValueProp
