@@ -64,8 +64,8 @@ instance
     ) =>
     Arbitrary (PFun a b)
     where
-    arbitrary = do
-        xs <- arbitrary :: Gen [PLifted a]
+    arbitrary = sized $ \r -> do
+        xs <- vectorOf r (arbitrary :: Gen (PLifted a))
         ys <- sequenceA $ ($ (arbitrary :: Gen (PLifted b))) . coarbitrary <$> xs
         let table = zipWith (,) xs ys
 

@@ -31,24 +31,29 @@ import Plutarch.Show
 import Test.QuickCheck
 import Test.QuickCheck.Function
 
+-- | @since x.y.z
 data PTermType
     = LastPFunction
     | LastPTerm
     | PFunction
     | PTerm
 
+-- | @since x.y.z
 type family PTT' isplam end :: PTermType where
     PTT' True True = LastPFunction
     PTT' False True = LastPTerm
     PTT' True False = PFunction
     PTT' False False = PTerm
 
+-- | @since x.y.z
 type PTT (p :: S -> Type) = PTT' (IsPLam p) (IsLast p)
 
+-- | @since x.y.z
 type family IsPLam (p :: S -> Type) :: Bool where
     IsPLam ((a :--> b) :--> c) = True
     IsPLam _ = False
 
+-- | @since x.y.z
 type family IsLast (p :: S -> Type) :: Bool where
     IsLast (a :--> PBool) = True
     IsLast _ = False
@@ -69,9 +74,15 @@ type family TestableFun (b :: PTermType) (p :: S -> Type) where
     TestableFun PFunction ((a :--> b) :--> c) = PFun a b -> (TestableFun (PTT c) c)
     TestableFun LastPFunction ((a :--> b) :--> c) = PFun a b -> (TestableFun (PTT c) c)
 
+{- | Convert Plutarch function into testable Haskell function that takes
+     `TestableTerm`. It also converts plutarch function into `PFun`.
+
+ @since x.y.z
+-}
 class FromPFunN (a :: S -> Type) (b :: S -> Type) (c :: PTermType) where
     fromPFun' :: Proxy c -> (forall s. Term s (a :--> b)) -> TestableFun c (a :--> b)
 
+-- | @since x.y.z
 instance
     forall a b.
     ( PLift a
@@ -81,9 +92,11 @@ instance
     where
     fromPFun' _ f = \(PFn x) -> TestableTerm $ f # x
 
+-- | @since x.y.z
 instance FromPFunN a PBool LastPTerm where
     fromPFun' _ f = \(TestableTerm x) -> TestableTerm $ f # x
 
+-- | @since x.y.z
 instance
     forall a b c d e.
     ( c ~ (d :--> e)
@@ -95,6 +108,7 @@ instance
     where
     fromPFun' _ f = \(PFn x) -> fromPFun' (Proxy @(PTT c)) $ f # x
 
+-- | @since x.y.z
 instance
     forall a b c d.
     ( b ~ (c :--> d)
