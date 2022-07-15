@@ -514,16 +514,23 @@ coArbitraryPListLike (TestableTerm x)
 This shinker "simplifies" underlaying plutarch representation. When
 shrinking List, this shinker is always preferable.
 -}
-eshrinkPBIL ::
+shrinkPLift ::
     forall a.
-    ( PArbitrary a
-    , PIsListLike PBuiltinList a
-    , PLift a
+    ( PLift a
+    , Arbitrary (PLifted a)
     ) =>
-    TestableTerm (PBuiltinList a) ->
-    [TestableTerm (PBuiltinList a)]
-eshrinkPBIL xs' = (psimplify . constrPList) <$> shrink (convToList xs')
+    TestableTerm a ->
+    [TestableTerm a]
+shrinkPLift = fmap pconstantT . shrink . pliftT
 
+arbitraryPLift ::
+    forall a.
+    ( PLift a
+    , Arbitrary (PLifted a)
+    ) =>
+    Gen (TestableTerm a)
+arbitraryPLift = pconstantT <$> arbitrary     
+    
 -- | @since x.y.z
 instance (PArbitrary a, PIsListLike PBuiltinList a) => PArbitrary (PBuiltinList a) where
     parbitrary = constrPList <$> arbitrary
