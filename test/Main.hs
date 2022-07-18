@@ -1,9 +1,9 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Main where
 
@@ -12,12 +12,11 @@ import Generics.SOP hiding (Fn, I)
 import Interface
 import Lib
 import Plutarch
-import Plutarch.Show
 import Plutarch.Api.V1 (
-    PMaybeData,
     AmountGuarantees (NoGuarantees, NonZero, Positive),
     KeyGuarantees (Sorted, Unsorted),
     PMap,
+    PMaybeData,
     PValue,
  )
 import "plutarch" Plutarch.Api.V1.AssocMap qualified as Assoc (
@@ -36,6 +35,7 @@ import Plutarch.Lift
 import Plutarch.List
 import Plutarch.Prelude
 import Plutarch.Prelude (PBool, PEq (..), PInteger)
+import Plutarch.Show
 import Plutarch.Show ()
 import Plutarch.Unsafe (punsafeCoerce)
 import PlutusCore.Data
@@ -43,10 +43,11 @@ import Test.QuickCheck (
     Arbitrary (arbitrary),
     Property,
     Testable,
+    counterexample,
     forAll,
     forAllShow,
     forAllShrink,
-    forAllShrinkShow,    
+    forAllShrinkShow,
     property,
     resize,
     shrink,
@@ -145,24 +146,28 @@ testProp6 = forAllShrink arbitrary shrink $ fromPFun test
     test = plam $ \f g x ->
         pfilter # f # (pmap # g # x) #== pmap # g # (pfilter # f # x)
 
-functorLaw :: forall (a :: (S -> Type) -> S -> Type).
-    ( PFunctor a, PEq (a PInteger)
+functorLaw ::
+    forall (a :: (S -> Type) -> S -> Type).
+    ( PFunctor a
+    , PEq (a PInteger)
     , PSubcategory a PInteger
     , PArbitrary (a PInteger)
     , IsPLam ((a PInteger) :--> PBool) ~ False
     ) =>
     Property
 functorLaw =
-    ( forAllShrink (resize 10 arbitrary) shrink $ \x ->
-        forAllShrink (resize 10 arbitrary) shrink $ \y ->
-            forAllShrinkShow
-                (resize 20 arbitrary)
-                (shrink)
-                (const "")
-                $ \z ->
-                    (fromPFun composition) x y z
-    )
-        .&&. (forAllShrinkShow arbitrary shrink (const "") (fromPFun identity))
+    counterexample
+        "Composition Law"
+        ( forAllShrink (resize 10 arbitrary) shrink $ \x ->
+            forAllShrink (resize 10 arbitrary) shrink $ \y ->
+                forAllShrinkShow
+                    (resize 20 arbitrary)
+                    (shrink)
+                    (const "")
+                    $ \z ->
+                        (fromPFun composition) x y z
+        )
+        .&&. counterexample "Identity Law" (forAllShrinkShow arbitrary shrink (const "") (fromPFun identity))
   where
     composition ::
         Term

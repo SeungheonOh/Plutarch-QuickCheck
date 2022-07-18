@@ -529,8 +529,8 @@ arbitraryPLift ::
     , Arbitrary (PLifted a)
     ) =>
     Gen (TestableTerm a)
-arbitraryPLift = pconstantT <$> arbitrary     
-    
+arbitraryPLift = pconstantT <$> arbitrary
+
 -- | @since x.y.z
 instance (PArbitrary a, PIsListLike PBuiltinList a) => PArbitrary (PBuiltinList a) where
     parbitrary = constrPList <$> arbitrary
