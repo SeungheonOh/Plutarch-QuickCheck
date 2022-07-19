@@ -27,9 +27,13 @@ import "plutarch" Plutarch.Api.V1.Value qualified as Value (
     passertSorted,
  )
 import Plutarch.Evaluate
+import Plutarch.Extra.Applicative
 import Plutarch.Extra.Functor
+import Plutarch.Extra.Identity
 import "liqwid-plutarch-extra" Plutarch.Extra.List
 import "liqwid-plutarch-extra" Plutarch.Extra.List (preverse)
+import Plutarch.Extra.Profunctor
+import Plutarch.Extra.Traversable hiding (plength)
 import Plutarch.Internal
 import Plutarch.Lift
 import Plutarch.List
@@ -49,9 +53,14 @@ import Test.QuickCheck (
     forAllShrink,
     forAllShrinkShow,
     property,
+    quickCheck,
+    quickCheckResult,
     resize,
     shrink,
+    verbose,
+    verboseCheck,
     (.&&.),
+    (.||.),
  )
 import Test.QuickCheck.Function
 import Test.Tasty (defaultMain, testGroup)
@@ -147,12 +156,12 @@ testProp6 = forAllShrink arbitrary shrink $ fromPFun test
         pfilter # f # (pmap # g # x) #== pmap # g # (pfilter # f # x)
 
 functorLaw ::
-    forall (a :: (S -> Type) -> S -> Type).
-    ( PFunctor a
-    , PEq (a PInteger)
-    , PSubcategory a PInteger
-    , PArbitrary (a PInteger)
-    , IsPLam ((a PInteger) :--> PBool) ~ False
+    forall (f :: (S -> Type) -> S -> Type).
+    ( PFunctor f
+    , PEq (f PA)
+    , PSubcategory f PA
+    , PArbitrary (f PA)
+    , IsPLam ((f PA) :--> PBool) ~ False
     ) =>
     Property
 functorLaw =
@@ -172,28 +181,181 @@ functorLaw =
     composition ::
         Term
             s
-            ( (PInteger :--> PInteger)
-                :--> (PInteger :--> PInteger)
-                :--> (a PInteger)
+            ( (PA :--> PA)
+                :--> (PA :--> PA)
+                :--> (f PA)
                 :--> PBool
             )
     composition = plam $ \f g x ->
         (pfmap # (plam $ \y -> g #$ f # y) # x) #== (pfmap # g # (pfmap # f # x))
 
-    identity :: Term s ((a PInteger) :--> PBool)
+    identity :: Term s ((f PInteger) :--> PBool)
     identity = plam $ \x ->
         (pfmap # (plam id) # x) #== x
 
+applyLaw ::
+    forall (f :: (S -> Type) -> S -> Type).
+    ( PApply f
+    , PApplicative f
+    , PEq (f PA)
+    , PArbitrary (f PA)
+    , PSubcategory f ~ Top
+    , IsPLam ((f PA) :--> PBool) ~ False
+    ) =>
+    Property
+applyLaw =
+    counterexample
+        "composition"
+        ( forAllShrink (resize 20 arbitrary) shrink $ \x ->
+            forAllShrinkShow (resize 20 arbitrary) shrink (const "") $ \y ->
+                forAllShrinkShow (resize 20 arbitrary) shrink (const "") $ \z ->
+                    (fromPFun composition) x y z
+        )
+        .&&. counterexample
+            "interchange 1"
+            ( forAllShrink (resize 20 arbitrary) shrink $ \x ->
+                forAllShrinkShow (resize 20 arbitrary) shrink (const "") $ \y ->
+                    forAllShrinkShow (resize 20 arbitrary) shrink (const "") $ \z ->
+                        (fromPFun interchange1) x y z
+            )
+        .&&. counterexample
+            "interchange 2"
+            ( forAllShrink (resize 20 arbitrary) shrink $ \x ->
+                forAllShrinkShow (resize 20 arbitrary) shrink (const "") $ \y ->
+                    forAllShrinkShow (resize 20 arbitrary) shrink (const "") $ \z ->
+                        (fromPFun interchange2) x y z
+            )
+  where
+    compose :: Term s ((c :--> d) :--> (b :--> c) :--> b :--> d)
+    compose = plam $ \f g x -> f #$ g # x
+    compose' :: Term s ((b :--> c) :--> (c :--> d) :--> b :--> d)
+    compose' = plam $ \g f x -> f #$ g # x
+
+    composition :: Term s ((PA :--> PA) :--> (PA :--> PA) :--> f PA :--> PBool)
+    composition = plam $ \f' g' x ->
+        let f = ppure @f # f'
+            g = ppure @f # f'
+         in ((compose #<$> f) #<*> g #<*> x) #== (f #<*> (g #<*> x))
+
+    interchange1 :: Term s ((PA :--> PA) :--> (PA :--> PA) :--> f PA :--> PBool)
+    interchange1 = plam $ \f' g x ->
+        let f = ppure @f # f'
+         in (f #<*> (g #<$> x)) #== (((compose' # g) #<$> f) #<*> x)
+
+    interchange2 :: Term s ((PA :--> PA) :--> (PA :--> PA) :--> f PA :--> PBool)
+    interchange2 = plam $ \f' g x ->
+        let f = ppure @f # f'
+         in (g #<$> (f #<*> x)) #== (((compose # g) #<$> f) #<*> x)
+
+applicativeLaw ::
+    forall (f :: (S -> Type) -> S -> Type).
+    ( PEq (f PA)
+    , PShow (f PA)
+    , PApplicative f
+    , PSubcategory f ~ Top
+    , PArbitrary (f PA)
+    , IsPLam ((f PA) :--> PBool) ~ False
+    ) =>
+    Property
+applicativeLaw =
+    counterexample
+        "Identity"
+        (forAllShrinkShow (resize 20 arbitrary) shrink (const "") (fromPFun identity))
+        .&&. counterexample
+            "Homomorphism"
+            ( forAllShrink (resize 20 arbitrary) shrink $ \x ->
+                forAllShrinkShow (resize 20 arbitrary) shrink (const "") $ \y ->
+                    (fromPFun homomorphism) x y
+            )
+        .&&. counterexample
+            "Interchange"
+            ( forAllShrink (resize 20 arbitrary) shrink $ \x ->
+                forAllShrinkShow (resize 20 arbitrary) shrink (const "") $ \y ->
+                    (fromPFun interchange) x y
+            )
+        .&&. counterexample
+            "composition"
+            ( forAllShrink (resize 20 arbitrary) shrink $ \x ->
+                forAllShrink (resize 20 arbitrary) shrink $ \y ->
+                    forAllShrinkShow (resize 20 arbitrary) shrink (const "") $ \z ->
+                        (fromPFun composition) x y z
+            )
+  where
+    compose :: Term s ((c :--> d) :--> (b :--> c) :--> (b :--> d))
+    compose = plam $ \f g x -> f #$ g # x
+
+    identity ::
+        Term s ((f PA) :--> PBool)
+    identity = plam $ \x -> ((ppure # plam id) #<*> x) #== x
+
+    homomorphism ::
+        Term s ((PA :--> PA) :--> PA :--> PBool)
+    homomorphism = plam $ \f x -> (ppure @f # f) #<*> (ppure @f # x) #== ppure @f # (f # x)
+
+    interchange ::
+        Term s ((PA :--> PA) :--> PA :--> PBool)
+    interchange = plam $ \f' x ->
+        let f = ppure @f # f'
+         in f #<*> (ppure @f # x) #== (ppure @f # (plam $ \g -> g # x)) #<*> f
+
+    composition ::
+        Term s ((PA :--> PA) :--> (PA :--> PA) :--> (f PA) :--> PBool)
+    composition = plam $ \f' g' x ->
+        let f = ppure @f # f'
+            g = ppure @f # g'
+         in (ppure @f # compose) #<*> f #<*> g #<*> x #== f #<*> (g #<*> x)
+
+traversableLaw ::
+    forall (t :: (S -> Type) -> S -> Type).
+    ( PTraversable t
+    , PSubcategory t ~ Top
+    , PEq (t PA)
+    , PArbitrary (t PA)
+    , IsPLam ((t PA) :--> PBool) ~ False
+    ) =>
+    Property
+traversableLaw =
+    counterexample "identity" $
+        forAllShrinkShow arbitrary shrink (const "") (fromPFun identity)
+  where
+    identity :: Term s (t PA :--> PBool)
+    identity = plam $ \x ->
+        ptraverse @t # (plam $ \x -> pcon $ PIdentity x) # x #== (pcon $ PIdentity x)
+
+{- Sadly, It's impossible to make an arbitrary applicative
+   transformation (Applicative f, Applicative g) => f a -> g a.
+-}
+-- nutrality :: Term s ((PList (t PA) :--> PA) :--> (PA :--> PList PA) :--> t PA :--> PInteger)
+-- nutrality = plam $ \f g x ->
+--     -- f # (ptraverse @t # g # x)--  #== --
+--     ptraverse @t # (compose # f # g) # x
+
 main = do
+    let n = 100
     defaultMain $
         testGroup "Tests" $
             [ testGroup "Functors" $
-                [ testProperty "PBuiltinList is Functor" $ withMaxSuccess 5000 $ (functorLaw @PBuiltinList)
-                , testProperty "PMaybeData is Functor" $ withMaxSuccess 5000 $ (functorLaw @PMaybeData)
-                , testProperty "PMaybe is Functor" $ withMaxSuccess 5000 $ (functorLaw @PMaybe)
-                , testProperty "PEither is Functor" $ withMaxSuccess 5000 $ (functorLaw @(PEither PUnit))
-                , testProperty "PList is Functor" $ withMaxSuccess 5000 $ (functorLaw @PList)
-                , testProperty "PMap is Functor" $ withMaxSuccess 5000 $ (functorLaw @(PMap Unsorted PInteger))
+                [ testProperty "PBuiltinList is Functor" $ withMaxSuccess n $ (functorLaw @PBuiltinList)
+                , testProperty "PMaybeData is Functor" $ withMaxSuccess n $ (functorLaw @PMaybeData)
+                , testProperty "PMaybe is Functor" $ withMaxSuccess n $ (functorLaw @PMaybe)
+                , testProperty "PEither is Functor" $ withMaxSuccess n $ (functorLaw @(PEither PUnit))
+                , testProperty "PList is Functor" $ withMaxSuccess n $ (functorLaw @PList)
+                , testProperty "PMap is Functor" $ withMaxSuccess n $ (functorLaw @(PMap Unsorted PInteger))
+                ]
+            , testGroup "Apply" $
+                [ testProperty "PBuiltinList is Apply" $ withMaxSuccess n $ (applyLaw @PList)
+                , testProperty "PMaybe is Apply" $ withMaxSuccess n $ (applyLaw @PMaybe)
+                , testProperty "PEither is Apply" $ withMaxSuccess n $ (applyLaw @(PEither PUnit))
+                ]
+            , testGroup "Applicative" $
+                [ testProperty "PBuiltinList is Applicative" $ withMaxSuccess n $ (applicativeLaw @PList)
+                , testProperty "PMaybe is Applicative" $ withMaxSuccess n $ (applicativeLaw @PMaybe)
+                , testProperty "PEither is Applicative" $ withMaxSuccess n $ (applicativeLaw @(PEither PUnit))
+                ]
+            , testGroup "Traversable" $
+                [ testProperty "PBuiltinList is Traversable" $ withMaxSuccess n $ (traversableLaw @PList)
+                , testProperty "PMaybe is Traversable" $ withMaxSuccess n $ (traversableLaw @PMaybe)
+                , testProperty "PEither is Traversable" $ withMaxSuccess n $ (traversableLaw @(PEither PUnit))
                 ]
             , testGroup "Values" $
                 [ testProperty "Generation of Sorted and Normalized Values" $ withMaxSuccess 1000 $ sortedValueProp

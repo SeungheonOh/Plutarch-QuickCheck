@@ -7,6 +7,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
@@ -185,3 +186,12 @@ haskEquiv' ::
     (forall s. Term s p) ->
     Property
 haskEquiv' h p = haskEquiv h (TestableTerm p) $ hcpure (Proxy @Arbitrary) arbitrary
+
+type PA :: S -> Type
+type PA = PInteger
+
+type PB :: S -> Type
+type PB = PInteger
+
+type PC :: S -> Type
+type PC = PInteger
