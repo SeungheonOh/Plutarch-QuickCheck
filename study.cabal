@@ -78,10 +78,9 @@ common common-lang
 
 library
   import:          common-lang
-  exposed-modules:
-    Function
-    Interface
-    Lib
+  exposed-modules: Plutarch.Test.QuickCheck
+  other-modules:   Plutarch.Test.QuickCheck.Function
+                 , Plutarch.Test.QuickCheck.Instances
 
   hs-source-dirs:  src
 

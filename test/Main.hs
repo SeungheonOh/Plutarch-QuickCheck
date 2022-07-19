@@ -7,10 +7,8 @@
 
 module Main where
 
-import Function
 import Generics.SOP hiding (Fn, I)
-import Interface
-import Lib
+import Plutarch.Test.QuickCheck
 import Plutarch
 import Plutarch.Api.V1 (
     AmountGuarantees (NoGuarantees, NonZero, Positive),
@@ -40,7 +38,6 @@ import Plutarch.List
 import Plutarch.Prelude
 import Plutarch.Prelude (PBool, PEq (..), PInteger)
 import Plutarch.Show
-import Plutarch.Show ()
 import Plutarch.Unsafe (punsafeCoerce)
 import PlutusCore.Data
 import Test.QuickCheck (

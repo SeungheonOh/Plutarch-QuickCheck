@@ -13,13 +13,20 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Function where
+module Plutarch.Test.QuickCheck.Function (
+    PFun (..),
+    pattern PFn,
+    applyPFun,
+    plamTable,
+    plamFinite,
+) where
+
+import Plutarch.Test.QuickCheck.Instances
 
 import Control.Arrow
 import Data.Kind
 import Data.List
 import Data.Universe
-import Lib
 import Plutarch
 import "liqwid-plutarch-extra" Plutarch.Extra.List
 import Plutarch.Extra.Maybe
@@ -117,7 +124,7 @@ plamTable ::
     Term s (a :--> b)
 plamTable t d = plam $ \x -> pmaybe # pconstant d # (plookup # x # pconstant t)
 
-pfiniteFunction ::
+plamFinite ::
     forall (a :: S -> Type) (b :: S -> Type) (s :: S).
     ( Finite (PLifted a)
     , PLift a
@@ -126,7 +133,7 @@ pfiniteFunction ::
     ) =>
     (PLifted a -> PLifted b) ->
     Term s (a :--> b)
-pfiniteFunction f = plam $ \x -> pfromJust #$ plookup # x # table
+plamFinite f = plam $ \x -> pfromJust #$ plookup # x # table
   where
     table :: Term s (PBuiltinList (PBuiltinPair a b))
     table = pconstant $ (id &&& f) <$> universeF

@@ -14,15 +14,42 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Interface where
+module Plutarch.Test.QuickCheck (
+    type IsPLam,
+    type IsLast,
+    type PTT,
+    type TestableFun,
+    type PLamArgs,
+    type PA,
+    type PB,
+    type PC,
+    FromPFunN (..),
+    fromPFun, 
+    haskEquiv',
+    haskEquiv,
+    shrinkPLift,
+    arbitraryPLift,
+
+    PFun (..),
+    pattern PFn,
+    applyPFun,
+    plamTable,
+    plamFinite,
+
+    TestableTerm (..), 
+    PArbitrary (..),
+    pconstantT,
+    pliftT,
+) where
+
+import Plutarch.Test.QuickCheck.Function
+import Plutarch.Test.QuickCheck.Instances
 
 import Control.Arrow
 import Data.Kind
 import Data.List
 import Data.Universe
-import Function
 import Generics.SOP hiding (And)
-import Lib
 import Plutarch
 import "liqwid-plutarch-extra" Plutarch.Extra.List
 import Plutarch.Extra.Maybe
@@ -195,3 +222,24 @@ type PB = PInteger
 
 type PC :: S -> Type
 type PC = PInteger
+
+{-
+This shinker "simplifies" underlaying plutarch representation. When
+shrinking List, this shinker is always preferable.
+-}
+shrinkPLift ::
+    forall a.
+    ( PLift a
+    , Arbitrary (PLifted a)
+    ) =>
+    TestableTerm a ->
+    [TestableTerm a]
+shrinkPLift = fmap pconstantT . shrink . pliftT
+
+arbitraryPLift ::
+    forall a.
+    ( PLift a
+    , Arbitrary (PLifted a)
+    ) =>
+    Gen (TestableTerm a)
+arbitraryPLift = pconstantT <$> arbitrary

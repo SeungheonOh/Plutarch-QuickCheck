@@ -11,7 +11,12 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module Lib where
+module Plutarch.Test.QuickCheck.Instances (
+    TestableTerm (..), 
+    PArbitrary (..),
+    pconstantT,
+    pliftT,
+) where
 
 import Control.Arrow
 import Data.ByteString (ByteString)
@@ -509,27 +514,6 @@ coArbitraryPListLike ::
 coArbitraryPListLike (TestableTerm x)
     | plift (pnull # x) = variant 0
     | otherwise = variant 1 . (pcoarbitrary $ TestableTerm $ phead # x) . (pcoarbitrary $ TestableTerm $ ptail # x)
-
-{-
-This shinker "simplifies" underlaying plutarch representation. When
-shrinking List, this shinker is always preferable.
--}
-shrinkPLift ::
-    forall a.
-    ( PLift a
-    , Arbitrary (PLifted a)
-    ) =>
-    TestableTerm a ->
-    [TestableTerm a]
-shrinkPLift = fmap pconstantT . shrink . pliftT
-
-arbitraryPLift ::
-    forall a.
-    ( PLift a
-    , Arbitrary (PLifted a)
-    ) =>
-    Gen (TestableTerm a)
-arbitraryPLift = pconstantT <$> arbitrary
 
 -- | @since x.y.z
 instance (PArbitrary a, PIsListLike PBuiltinList a) => PArbitrary (PBuiltinList a) where
